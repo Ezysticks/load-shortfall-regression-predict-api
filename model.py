@@ -22,10 +22,15 @@
 """
 
 # Helper Dependencies
+from pyexpat import features
+from time import time
 import numpy as np
 import pandas as pd
 import pickle
 import json
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import KNNImputer
 
 def _preprocess_data(data):
     """Private helper function to preprocess data for model prediction.
@@ -48,7 +53,8 @@ def _preprocess_data(data):
     feature_vector_dict = json.loads(data)
     # Load the dictionary as a Pandas DataFrame.
     feature_vector_df = pd.DataFrame.from_dict([feature_vector_dict])
-
+    data = pd.read_csv('./utils/data/df_test.csv', index_col=0)
+    feature_vector_df =  data
     # ---------------------------------------------------------------
     # NOTE: You will need to swap the lines below for your own data
     # preprocessing methods.
@@ -58,9 +64,40 @@ def _preprocess_data(data):
     # ---------------------------------------------------------------
 
     # ----------- Replace this code with your own preprocessing steps --------
-    predict_vector = feature_vector_df[['Madrid_wind_speed','Bilbao_rain_1h','Valencia_wind_speed']]
+    #predict_vector = feature_vector_df[['Madrid_wind_speed','Bilbao_rain_1h','Valencia_wind_speed']]
     # ------------------------------------------------------------------------
 
+    #converting the time column to datetime
+    feature_vector_df['time'] =  pd.to_datetime(feature_vector_df['time'])
+
+    #creating new temporal features
+    feature_vector_df['Day_of_Week'] = feature_vector_df['time'].dt.dayofweek
+    feature_vector_df['Week_of_Year'] = feature_vector_df['time'].dt.isocalendar().week.astype(int)
+    feature_vector_df['Day_of_Year'] = feature_vector_df['time'].dt.dayofyear
+    feature_vector_df['Month_of_Year'] = pd.DatetimeIndex(feature_vector_df['time']).month  # Actual Month
+    feature_vector_df['Year'] = pd.DatetimeIndex(feature_vector_df['time']).year  # Actual Year
+    feature_vector_df['Day_of_Month'] = pd.DatetimeIndex(feature_vector_df['time']).day  # Day of month
+    feature_vector_df['Hour_of_Day'] = pd.DatetimeIndex(feature_vector_df['time']).hour  # Hour of day
+    feature_vector_df['Hour_of_Year'] = (feature_vector_df['time'].dt.dayofyear) * 24 + feature_vector_df['time'].dt.hour  # Hour of year -1
+    feature_vector_df['Hour_of_Week'] = (feature_vector_df['time'].dt.dayofweek) * 24 + feature_vector_df['time'].dt.hour  # Hour of week
+
+    feature_vector_df = pd.get_dummies(feature_vector_df, drop_first=True)
+
+    feature_vector_df = feature_vector_df.drop('time', axis=1)
+
+    #scaling the featuers
+    scaler = StandardScaler()
+    feature_vector_df = pd.DataFrame(scaler.fit_transform(feature_vector_df), columns=feature_vector_df.columns)
+
+    feature_vector_df = feature_vector_df.fillna(feature_vector_df['Valencia_pressure'].median())
+
+    #imputer = KNNImputer(n_neighbors=6)
+    #feature_vector_df = pd.DataFrame(imputer.fit_transform(feature_vector_df), columns=feature_vector_df.columns)
+    #the feature variables
+    #feature_vector_df = feature_vector_df.drop('load_shortfall_3h', axis=1)
+    
+    predict_vector = feature_vector_df
+    
     return predict_vector
 
 def load_model(path_to_model:str):
@@ -107,4 +144,4 @@ def make_prediction(data, model):
     # Perform prediction with model and preprocessed data.
     prediction = model.predict(prep_data)
     # Format as list for output standardisation.
-    return prediction[0].tolist()
+    return prediction.tolist()
